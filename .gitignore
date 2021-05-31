@@ -1,0 +1,4 @@
+microservices/api/node_modules/
+microservices/api/dist/
+microservices/ui/node_modules/
+microservices/ui/dist/
