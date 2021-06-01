@@ -1,19 +1,23 @@
-import { ObjectId } from "@kaviar/ejson";
 import * as X from "@kaviar/x-bundle";
 import { TodosCollection } from "../../../collections/Todos/Todos.collection";
+import { Todo } from '../../../collections'
+import { TodosService } from '../../../services/Todos.service'
 
 export default {
   Query: [
     [],
     {
       todosFindOne: [X.CheckLoggedIn(), X.ToNovaOne(TodosCollection)],
-      todosFind: [X.CheckLoggedIn(), X.ToNova(TodosCollection, (_, _2, ctx, _3) => {
-        return {
-          filters: {
-            userId: new ObjectId(ctx.userId)
+      todosFind: [
+        X.CheckLoggedIn(),
+        X.ToNova(TodosCollection, (_, _2, ctx, _3) => {
+          return {
+            filters: {
+              userId: ctx.userId
+            }
           }
-        }
-      })],
+        })
+      ],
       todosCount: [X.CheckLoggedIn(), X.ToCollectionCount(TodosCollection)],
     },
   ],
@@ -23,55 +27,30 @@ export default {
       todosInsertOne: [
         X.CheckLoggedIn(),
 
-        async (_: any, args: any, ctx: any, ast: any) => {
+        async (_: any, args: any, ctx: any, _2: any) => {
 
-          const filters = {
-            userId: ctx.userId,
-            title: args.document.title,
-          }
+          const todosCollection = ctx.container.get(TodosCollection) as TodosCollection
+          const todosService = ctx.container.get(TodosService) as TodosService
 
-          const checkExistsSameTitle = await X.ToCollectionCount(TodosCollection, (_: any, _2: any, _3: any) => filters)(_, args, ctx, ast)
+          await todosService.checkUserHasTodoSameTitle(ctx.userId, args.document.title)
+          
+          const data: Partial <Todo> = args.document
 
-          if (checkExistsSameTitle) {
-            throw new Error('You have a Todo with the exact same title already.')
-          }
+          const document: Todo = await todosService.createDocument(ctx.userId, data)
 
-          const argsWithUserID = {
-            document: {
-              ...args.document,
-              userId: new ObjectId(ctx.userId),
-              order: await X.ToCollectionCount(TodosCollection)(_, args, ctx, ast) + 1
-            }
-          }
+          const inserted = (await todosCollection.insertOne(document)).ops[0]
 
-          const _id = await X.ToDocumentInsert(TodosCollection)(_, argsWithUserID, ctx, ast)
-
-          return await X.ToNovaByResultID(TodosCollection, () => ({
-            filters: {
-              _id
-            }
-          }))(_, args, ctx, ast)
+          return inserted
         },
-
-        // X.ToDocumentInsert(TodosCollection),
-        
-        // X.ToNovaByResultID(TodosCollection),
       ],
       todosUpdateOne: [
         X.CheckLoggedIn(),
         X.CheckDocumentExists(TodosCollection),
 
         async (_: any, args: any, ctx: any, ast: any) => {
-          const filters = {
-            _id: args._id,
-            userId: ctx.userId
-          }
+          const todosService = ctx.container.get(TodosService) as TodosService
 
-          const checkExists = await X.ToCollectionCount(TodosCollection, (_: any, _2: any, _3: any) => filters)(_, args, ctx, ast)
-
-          if (!checkExists) {
-            throw new Error('Invalid mutation - trying to modify other user\'s Todo.')
-          }
+          await todosService.checkTodoBelongsToUser(ctx.userId, args._id)
         },
 
         X.ToDocumentUpdateByID(TodosCollection),
@@ -80,21 +59,14 @@ export default {
 
       todosDeleteOne: [
         X.CheckLoggedIn(),
+        X.CheckDocumentExists(TodosCollection),
 
         async (_: any, args: any, ctx: any, ast: any) => {
-          const filters = {
-            _id: args._id,
-            userId: ctx.userId
-          }
+          const todosService = ctx.container.get(TodosService) as TodosService
 
-          const checkExists = await X.ToCollectionCount(TodosCollection, (_: any, _2: any, _3: any) => filters)(_, args, ctx, ast)
-
-          if (!checkExists) {
-            throw new Error('Invalid mutation - trying to modify other user\'s Todo.')
-          }
+          await todosService.checkTodoBelongsToUser(ctx.userId, args._id)
         },
 
-        X.CheckDocumentExists(TodosCollection),
         X.ToDocumentDeleteByID(TodosCollection),
       ],
     },
