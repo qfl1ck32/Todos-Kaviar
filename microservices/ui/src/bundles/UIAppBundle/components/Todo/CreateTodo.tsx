@@ -29,8 +29,7 @@ export const CreateTodo = ({ setTodos } : CreateTodoProps) => {
     const onSubmit = (data: ITodo) => {
         todosCollection.insertOne({
             title: data.title,
-            description: data.description,
-            checked: false
+            description: data.description
         })
         .then(todo => {
             const newTodo = {
